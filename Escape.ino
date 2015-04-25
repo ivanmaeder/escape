@@ -1,15 +1,4 @@
 /*
- At a minimum
- ------------
- 1. Randomly generated background (the top 2-3 rows)
- 2. Randomly generated obstacles, with a minimum clearance between them
- 3. Press UP to jump obstacles:
-
-          .             ...       .       .        ..
-         . .    .      .   .     . .     . .      .  .
-        .   .  . .    .  #  .   .   .   . # .    . ## .
-     ...  #  .. # ....   #   ...  ## ... ### ....  ##  ..
-    ######################################################
  Then
  ----
  4. More ideas:
@@ -27,27 +16,30 @@
         
 NOTES
 - The API global vars should have a prefix or be in an object. E.g., I tried
-  making a var called player and got errors. This would be confusing to a novice
-  programmer
+  making a var called "player" and got errors. This would be confusing to a novice
+  programmer. This happens with Arduino stuff (e.g., 'FALLING') but we shouldn't
+  add to the confusion.
  */
 #include <Gamer.h>
 
-struct Cloud {
+struct Sprite {
   char x;
   char y;
 };
 
 typedef enum {
   READY,
-  JUMP,
-  FALL
+  ON_THE_WAY_UP,
+  ON_THE_WAY_DOWN
 } JumpPosition;
 
 Gamer g;
 
-Cloud cloud1, cloud2;
-int runner = 6;
+Sprite cloud1, cloud2;
+Sprite runner;
+Sprite obstacle1, obstacle2;
 JumpPosition jump = READY;
+int airtime = 0;
 
 int bitmap[8][8] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -66,14 +58,25 @@ void setup() {
   
   Serial.begin(9600);
 
+  runner = { 1, 6 };
   cloud1 = { 8, 1 };
+  obstacle1 = { 8, 6 };
+  obstacle2 = { 16, 6 };
 }
 
 void loop() {
   updateGameState();
   updateScreen();
 
-  delay(180);
+  if (isPositionEqual(runner, obstacle1) || isPositionEqual(runner, obstacle2)) {
+    delay(2000);    
+  }
+  
+  delay(140);
+}
+
+bool isPositionEqual(struct Sprite a, struct Sprite b) {
+  return a.x == b.x && a.y == b.y;
 }
 
 void updateGameState() {
@@ -88,60 +91,51 @@ void updateGameState() {
     cloud2.x = random(8, 16);
     cloud2.y = random(0, 3);
   }
+  
+  obstacle1.x--;
+  if (obstacle1.x < 0) {
+    obstacle1.x = random(obstacle2.x, obstacle2.x + 16);
+  }
+  
+  obstacle2.x--;
+  if (obstacle2.x < 0) {
+    obstacle2.x = random(obstacle1.x, obstacle1.x + 16);
+  }
 
-  /* Not bad, but it would be better if users had to lift again after 
-   the character hits the ground.
-   */
-  if (jump != FALL && g.isHeld(UP)) {
+  if (jump == ON_THE_WAY_UP) {
+    airtime++;
+  }
+
+  if (airtime > 3) {
+    jump = ON_THE_WAY_DOWN;
+  }
+
+  if (jump != ON_THE_WAY_DOWN && g.isHeld(UP)) {
     if (jump == READY) {
-      jump = JUMP;
+      jump = ON_THE_WAY_UP;
     }
     
-    if (jump == JUMP) {
-      if (runner > 3) {
-        runner--;
+    if (jump == ON_THE_WAY_UP) {
+      if (runner.y > 3) {
+        runner.y--;
       }
     }
   }
   else {
-    if (jump == JUMP) {
-      jump = FALL;
+    airtime = 0;
+    if (jump == ON_THE_WAY_UP) {
+      jump = ON_THE_WAY_DOWN;
     }
     
-    if (jump == FALL) {
-      if (runner < 6) {
-      runner++;
+    if (jump == ON_THE_WAY_DOWN) {
+      if (runner.y < 6) {
+        runner.y++;
       }
       else {
         jump = READY;
       }
     }
   }
-
-    
-  /*
-  if (g.isHeld(UP)) {
-    if (jump != FALL) {
-      jump = JUMP;
-
-      if (runner > 3) {
-        runner--;
-      }
-    }
-  }
-  else {
-    if (jump == JUMP) {
-      jump = FALL;
-    }
-
-    if (runner < 6) {
-      runner++;
-    }
-    else {
-      jump = READY;
-    }
-  }
-  */
 }
 
 void updateScreen() {
@@ -162,13 +156,23 @@ void clearBitmap() {
 void updateBitmapWithGameState() {
   //ground
   for (int i = 0; i < 8; i++) {
-    g.display[i][7] = 1;
+    activateBit(i, 7);
   }
 
-  //clouds
-  g.display[cloud1.x][cloud1.y] = 1;
-  g.display[cloud2.x][cloud2.y] = 1;
-
   //player
-  g.display[1][runner] = 1;
+  activateBit(runner.x, runner.y);
+
+  //clouds
+//  activateBit(cloud1.x, cloud1.y);
+//  activateBit(cloud2.x, cloud2.y);
+
+  //obstacles
+  activateBit(obstacle1.x, obstacle1.y);
+  activateBit(obstacle2.x, obstacle2.y);
+}
+
+void activateBit(int x, int y) {
+  if (x >= 0 && x < 8 && y >= 0 && y < 8) {
+    g.display[x][y] = 1;
+  }
 }
