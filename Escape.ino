@@ -37,10 +37,17 @@ struct Cloud {
   char y;
 };
 
+typedef enum {
+  READY,
+  JUMP,
+  FALL
+} JumpPosition;
+
 Gamer g;
 
 Cloud cloud1, cloud2;
 int runner = 6;
+JumpPosition jump = READY;
 
 int bitmap[8][8] = {
   { 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -82,15 +89,65 @@ void updateGameState() {
     cloud2.y = random(0, 3);
   }
 
-//  Serial.println(cloud1.x);
+  /* Not bad, but it would be better if users had to lift again after 
+   the character hits the ground.
+   */
+  if (jump != FALL && g.isHeld(UP)) {
+    if (jump == READY) {
+      jump = JUMP;
+    }
+    
+    if (jump == JUMP) {
+      if (runner > 3) {
+        runner--;
+      }
+    }
+  }
+  else {
+    if (jump == JUMP) {
+      jump = FALL;
+    }
+    
+    if (jump == FALL) {
+      if (runner < 6) {
+      runner++;
+      }
+      else {
+        jump = READY;
+      }
+    }
+  }
+
+    
+  /*
+  if (g.isHeld(UP)) {
+    if (jump != FALL) {
+      jump = JUMP;
+
+      if (runner > 3) {
+        runner--;
+      }
+    }
+  }
+  else {
+    if (jump == JUMP) {
+      jump = FALL;
+    }
+
+    if (runner < 6) {
+      runner++;
+    }
+    else {
+      jump = READY;
+    }
+  }
+  */
 }
 
 void updateScreen() {
   clearBitmap();
   updateBitmapWithGameState();
   
-//  g.printImage(bitmap);
-//  g.display = bitmap;
   g.updateDisplay();
 }
 
