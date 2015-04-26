@@ -1,158 +1,265 @@
-/*
- Then
- ----
- 4. More ideas:
-    - Music!
-    - Sound effects!
-    - Pressing start asks to restart; pressing again confirms
-    - Walls you can cross by ducking (press DOWN)
-    - Gaps in floor you have to clear
-    - Jumping up and down onto different levels
-    - Score based on time playing
-    - Winning! Being rewarded for finishing the game
-        - It having an ending and leaving you wanting more
-        - More can be: more games or making changes to the game yourself
-        
-        
-NOTES
-- The API global vars should have a prefix or be in an object. E.g., I tried
-  making a var called "player" and got errors. This would be confusing to a novice
-  programmer. This happens with Arduino stuff (e.g., 'FALLING') but we shouldn't
-  add to the confusion.
-- Score doesn't do numbers > 99
-- 
- */
 #include <Gamer.h>
 
-struct Sprite {
+/* The maximum jump height the runner can achieve. Change this number to
+ make the runner jump higher or lower.
+ */
+const int JUMP_HEIGHT = 3;
+
+/* The maximum amount of time the runner can stay in the air. For super
+ long jumps, make this number really high.
+ */
+const int JUMP_LENGTH = 2;
+
+/* This value controls the running speed at the beginning of the game. The
+ higher the number, the faster the runner will start.
+
+ BEWARE! The runner goes faster and faster as the game progresses.
+ */
+const int INITIAL_SPEED = 60;
+
+const int MIN_X = 0, MAX_X = 7, MIN_Y = 0, MAX_Y = 7;
+
+struct Coordinate {
   char x;
   char y;
 };
 
+struct Sprite {
+  Coordinate coordinate;
+};
+
 typedef enum {
-  READY,
-  ON_THE_WAY_UP,
-  ON_THE_WAY_DOWN
+  RUNNING,
+  ASCENDING,
+  DESCENDING
 } JumpPosition;
 
 Gamer g;
 
+/* These are the objects that can move on the screen. */
 Sprite runner;
 Sprite obstacle1, obstacle2;
-JumpPosition jump = READY;
-byte airtime = 0;
+
+/* These variables are used by the program to keep track of state. For
+ example, the score variable is incremented by one every time the runner
+ jumps over an obstacle.
+ */
+JumpPosition jumpPosition;
+byte airtime;
 int score;
+bool isAudioOn = true;
 
 byte bitmap[8][8];
 
 void setup() {
   g.begin();
   randomSeed(g.ldrValue());
-  
-  Serial.begin(9600);
 
+  /* Initialise (or reset) state variables. */
+  jumpPosition = RUNNING;
+  airtime = 0;
   score = 0;
-  runner = { 1, 6 };
-  obstacle1 = { 8, 6 };
-  obstacle2 = { 16, 6 };
+
+  /* Place sprites at their starting positions. */
+  runner.coordinate = { 1, 6 };
+  obstacle1.coordinate = { 8, 6 };
+  obstacle2.coordinate = { 16, 6 };
 }
 
 void loop() {
-  //we should be able to copy game state: so we can have the previous and the new
+  playPauseHandler();
   updateGameState();
-
-  if (isPositionEqual(runner, obstacle1) || isPositionEqual(runner, obstacle2)) {
-    memcpy(bitmap, g.display, sizeof(bitmap));
-
-    g.clear();
-    delay(300);
-    memcpy(g.display, bitmap, sizeof(bitmap));
-    g.updateDisplay();
-    delay(300);
-    g.clear();
-    delay(300);
-    memcpy(g.display, bitmap, sizeof(bitmap));
-    g.updateDisplay();
-    delay(300);
-    g.showScore(min(score, 99));
-    delay(1000);
-    setup();
-  }
-
+  collisionDetectionHandler();
   updateScreen();
-  
-  delay(140);
+
+  delay(200 - INITIAL_SPEED - score);
 }
 
-bool isPositionEqual(struct Sprite a, struct Sprite b) {
+void playPauseHandler() {
+  if (g.isHeld(START)) {
+    delay(500);
+
+    while (!g.isHeld(START)) {
+      if (g.isHeld(LEFT)) {
+        isAudioOn = !isAudioOn;
+        
+        if (isAudioOn)
+          g.printString("SOUND ON");
+        else
+          g.printString("SOUND OFF");
+          
+        memcpy(g.display, bitmap, sizeof(bitmap));
+        g.updateDisplay();
+      }
+    }
+  }
+}
+
+void collisionDetectionHandler() {
+  if (collisionDetected()) {
+    crashSound();
+    flashScreen();
+
+    g.showScore(min(score, 99));
+    delay(1000);
+
+    /* Restart the game. */
+    setup();
+  }
+}
+
+bool collisionDetected() {
+  return isCoordinateEqual(runner.coordinate, obstacle1.coordinate) || isCoordinateEqual(runner.coordinate, obstacle2.coordinate);
+}
+
+bool isCoordinateEqual(struct Coordinate a, struct Coordinate b) {
   return a.x == b.x && a.y == b.y;
 }
 
-void updateGameState() {
-  obstacle1.x--;
-  if (obstacle1.x < 0) {
-    obstacle1.x = random(max(obstacle2.x, 7), obstacle2.x + 16);
-    score++;
+void flashScreen() {
+  for (int i = 0; i < 2; i++) {
+    g.clear();
+    delay(300);
+
+    memcpy(g.display, bitmap, sizeof(bitmap));
+    g.updateDisplay();
+    delay(300);
   }
-  
-  obstacle2.x--;
-  if (obstacle2.x < 0) {
-    obstacle2.x = random(max(obstacle1.x, 7), obstacle1.x + 16);
+}
+
+void updateGameState() {
+  obstacle1.coordinate.x--;
+  if (obstacle1.coordinate.x < 0) {
+    obstacle1.coordinate.x = random(max(obstacle2.coordinate.x, 7), obstacle2.coordinate.x + 16);
     score++;
   }
 
-  if (jump == ON_THE_WAY_UP)
+  obstacle2.coordinate.x--;
+  if (obstacle2.coordinate.x < 0) {
+    obstacle2.coordinate.x = random(max(obstacle1.coordinate.x, 7), obstacle1.coordinate.x + 16);
+    score++;
+  }
+
+  updateJumpPosition();
+}
+
+void updateJumpPosition() {
+  if (isJumping())
     airtime++;
 
-  if (airtime > 3)
-    jump = ON_THE_WAY_DOWN;
+  if (airtime >= JUMP_HEIGHT + JUMP_LENGTH)
+    mustDescend();
 
-  if (jump != ON_THE_WAY_DOWN && g.isHeld(UP)) {
-    if (jump == READY)
-      jump = ON_THE_WAY_UP;
-    
-    if (jump == ON_THE_WAY_UP && runner.y > 3)
-        runner.y--;
+  if (!isFalling() && g.isHeld(UP)) {
+    if (isRunning())
+      mustAscend();
+
+    if (isJumping() && isBelowMaximumJumpHeight())
+        ascend();
   }
   else {
     airtime = 0;
-    if (jump == ON_THE_WAY_UP)
-      jump = ON_THE_WAY_DOWN;
-    
-    if (jump == ON_THE_WAY_DOWN)
-      if (runner.y < 6)
-        runner.y++;
+
+    if (isJumping())
+      mustDescend();
+
+    if (isFalling()) {
+      if (runner.coordinate.y < 6)
+        descend();
       else
-        jump = READY;
+        mustRun();
+    }
   }
+}
+
+bool isRunning() {
+  return jumpPosition == RUNNING;
+}
+
+bool isJumping() {
+  return jumpPosition == ASCENDING;
+}
+
+bool isFalling() {
+  return jumpPosition == DESCENDING;
+}
+
+void mustRun() {
+  jumpPosition = RUNNING;
+}
+
+void mustAscend() {
+  jumpSound();
+  jumpPosition = ASCENDING;
+}
+
+void mustDescend() {
+  jumpPosition = DESCENDING;
+}
+
+void ascend() {
+  /* Because the top row of the screen is zero (the y-value is 0), the lower
+   the y-value, the higher the row.
+
+   The row on the bottom of the screen has a y-value of 7.
+   */
+   runner.coordinate.y--;
+}
+
+void descend() {
+  /* The lower the y-value, the higher the screen row. */
+  runner.coordinate.y++;
+}
+
+bool isBelowMaximumJumpHeight() {
+  const int FLOOR_HEIGHT = 1;
+
+  return runner.coordinate.y > (MAX_Y - FLOOR_HEIGHT - JUMP_HEIGHT);
 }
 
 void updateScreen() {
   clearBitmap();
   updateBitmapWithGameState();
-  
+
   memcpy(g.display, bitmap, sizeof(bitmap));
   g.updateDisplay();
 }
 
 void clearBitmap() {
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
+  for (int i = 0; i < 8; i++)
+    for (int j = 0; j < 8; j++)
       bitmap[i][j] = 0;
-    }
-  }
 }
 
 void updateBitmapWithGameState() {
   for (int i = 0; i < 8; i++)
-    activateBit(i, 7);
-  
-  activateBit(runner.x, runner.y);
-  activateBit(obstacle1.x, obstacle1.y);
-  activateBit(obstacle2.x, obstacle2.y);
+    activateBit(Coordinate { i, 7 });
+
+  activateBit(runner.coordinate);
+  activateBit(obstacle1.coordinate);
+  activateBit(obstacle2.coordinate);
 }
 
-void activateBit(int x, int y) {
-  if (x >= 0 && x < 8 && y >= 0 && y < 8)
-    bitmap[x][y] = 1;
+void activateBit(Coordinate coordinate) {
+  if (coordinate.x >= 0 && coordinate.x < 8 && coordinate.y >= 0 && coordinate.y < 8)
+    bitmap[coordinate.x][coordinate.y] = 1;
+}
+
+void jumpSound() {
+  if (isAudioOn) {
+    g.playTone(200);
+    delay(20);
+    g.stopTone();
+  }
+}
+
+void crashSound() {
+  if (isAudioOn) {
+    for (int t = 200; t < 255; t++) {
+      g.playTone(t);
+      delay(10);
+    }
+
+    g.stopTone();
+  }
 }
