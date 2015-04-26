@@ -24,9 +24,13 @@ NOTES
  */
 #include <Gamer.h>
 
-struct Sprite {
+struct Coordinate {
   char x;
   char y;
+};
+
+struct Sprite {
+  Coordinate coordinate;
 };
 
 typedef enum {
@@ -52,16 +56,16 @@ void setup() {
   Serial.begin(9600);
 
   score = 0;
-  runner = { 1, 6 };
-  obstacle1 = { 8, 6 };
-  obstacle2 = { 16, 6 };
+  runner.coordinate = { 1, 6 };
+  obstacle1.coordinate = { 8, 6 };
+  obstacle2.coordinate = { 16, 6 };
 }
 
 void loop() {
   //we should be able to copy game state: so we can have the previous and the new
   updateGameState();
 
-  if (isPositionEqual(runner, obstacle1) || isPositionEqual(runner, obstacle2)) {
+  if (isCoordinateEqual(runner.coordinate, obstacle1.coordinate) || isCoordinateEqual(runner.coordinate, obstacle2.coordinate)) {
     memcpy(bitmap, g.display, sizeof(bitmap));
 
     g.clear();
@@ -84,20 +88,20 @@ void loop() {
   delay(140);
 }
 
-bool isPositionEqual(struct Sprite a, struct Sprite b) {
+bool isCoordinateEqual(struct Coordinate a, struct Coordinate b) {
   return a.x == b.x && a.y == b.y;
 }
 
 void updateGameState() {
-  obstacle1.x--;
-  if (obstacle1.x < 0) {
-    obstacle1.x = random(max(obstacle2.x, 7), obstacle2.x + 16);
+  obstacle1.coordinate.x--;
+  if (obstacle1.coordinate.x < 0) {
+    obstacle1.coordinate.x = random(max(obstacle2.coordinate.x, 7), obstacle2.coordinate.x + 16);
     score++;
   }
   
-  obstacle2.x--;
-  if (obstacle2.x < 0) {
-    obstacle2.x = random(max(obstacle1.x, 7), obstacle1.x + 16);
+  obstacle2.coordinate.x--;
+  if (obstacle2.coordinate.x < 0) {
+    obstacle2.coordinate.x = random(max(obstacle1.coordinate.x, 7), obstacle1.coordinate.x + 16);
     score++;
   }
 
@@ -111,8 +115,8 @@ void updateGameState() {
     if (jump == READY)
       jump = ON_THE_WAY_UP;
     
-    if (jump == ON_THE_WAY_UP && runner.y > 3)
-        runner.y--;
+    if (jump == ON_THE_WAY_UP && runner.coordinate.y > 3)
+        runner.coordinate.y--;
   }
   else {
     airtime = 0;
@@ -120,8 +124,8 @@ void updateGameState() {
       jump = ON_THE_WAY_DOWN;
     
     if (jump == ON_THE_WAY_DOWN)
-      if (runner.y < 6)
-        runner.y++;
+      if (runner.coordinate.y < 6)
+        runner.coordinate.y++;
       else
         jump = READY;
   }
@@ -147,9 +151,9 @@ void updateBitmapWithGameState() {
   for (int i = 0; i < 8; i++)
     activateBit(i, 7);
   
-  activateBit(runner.x, runner.y);
-  activateBit(obstacle1.x, obstacle1.y);
-  activateBit(obstacle2.x, obstacle2.y);
+  activateBit(runner.coordinate.x, runner.coordinate.y);
+  activateBit(obstacle1.coordinate.x, obstacle1.coordinate.y);
+  activateBit(obstacle2.coordinate.x, obstacle2.coordinate.y);
 }
 
 void activateBit(int x, int y) {
