@@ -1,5 +1,13 @@
 #include <Gamer.h>
 
+/*
+TODO Looks like bitmap can be dropped (the screen is not updated until updateScreen()
+TODO Make JUMP_LENGTH the actual length of the jump (airtime should increment whilst ascending and descending)
+TODO Test isPressed (this could simplify the jumping code)
+TODO Try printImage for obstacles
+
+ */
+
 /* The maximum jump height the runner can achieve. Change this number to
  make the runner jump higher or lower.
  */
