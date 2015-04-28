@@ -80,7 +80,7 @@ void loop() {
   collisionDetectionHandler();
   updateScreen();
 
-  delay(200 - INITIAL_SPEED - score);
+  delay(200 - INITIAL_SPEED - score); //the higher the score, the smaller the delay and the faster the game
 }
 
 void playPauseHandler() {
